@@ -19,22 +19,9 @@ model:
   # The model runs one row at a time and decides after each whether to stop.
   # A row is n_recur + n_coda block applications.
   #
-  # RESCALING RULE: max_steps, halt_prior, bptt_window and train_steps_mean
-  # are all counted in ROWS, so all four move together if n_recur or n_coda
-  # changes what a row is. Missing one is silent.
-
-  max_steps: 24           # most rows a character may take
-  min_steps: 1            # rows it must run before halting may stop it
-
-  halt_prior: 0.072       # halting is held to a mean of 1/this rows
-  halt_thresh: 0.9        # at inference, stop at the first row past this
-  ponder_beta: 0.01       # weight on the halting KL
-
-  bptt_window: 24         # rows gradient reaches back through. Also the
-                          # activation memory, so it sets peak VRAM
-
-  train_steps_mean: 12.8  # depth sampled while training: poisson(this) + 1,
-                          # clipped. 0 runs the ceiling every step
+  # NoProp-FM Continuous-Time Denoising configuration
+  euler_steps: 10         # Number of Euler integration steps during inference
+  lambda_anchor: 1.0      # Weight for the anchor cross-entropy loss
 
   # The window attention reaches back over. Reading starts at context_start
   # and grows only when the model is still gaining from the far end of what

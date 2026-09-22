@@ -9,7 +9,6 @@ Training mini-AGI.
               one chunk of characters at a time. Peak memory is set by
               --chunk and nothing else, so --context is nearly free to extend.
 
-    probe     what depth the model chooses, per character.
 
 Everything here runs at batch 1 behind a cache. The fixed-window regime that
 preceded it - several windows per step, one autograd graph over each whole
@@ -427,7 +426,7 @@ class _Tracer:
             meta=_json.dumps({"chunks": self.meta, "swaps": self.swaps,
                               "chunk": chunk,
                               "top_k": cfg.pool_top_k,
-                              "max_steps": cfg.max_steps,
+                              "euler_steps": cfg.euler_steps,
                               "n_recur": cfg.n_recur, "n_coda": cfg.n_coda,
                               "n_prelude": cfg.n_prelude,
                               "context": cfg.block,
@@ -738,58 +737,9 @@ def cmd_read(args):
                       birth_gate=args.birth_gate,
                       recent_mult=args.recent_mult) \
         if args.grow_k else None
-    # The checkpoint carries whatever depth policy it was trained under, but
-    # this is a knob about how to spend compute now, not a property of the
-    # weights - so config.yaml wins over the manifest every time.
-    cfg.train_steps_mean = float(args.train_steps_mean)
-    cfg.min_steps = max(1, min(int(args.min_steps), cfg.max_steps))
-    if args.bptt_window:
-        cfg.bptt_window = int(args.bptt_window)
-    if args.ponder_beta:
-        cfg.ponder_beta = float(args.ponder_beta)
-    if args.halt_prior:
-        cfg.halt_prior = float(args.halt_prior)
-    if args.halt_thresh:
-        cfg.halt_thresh = float(args.halt_thresh)
-    # The settings above are counted in ROWS, and the CHECKPOINT decides how
-    # many rows a step is - n_recur + n_coda. So a config written for one
-    # architecture is silently wrong on another, and the failure is not always
-    # loud: bptt_window 16 against max_steps 6 makes the detach condition
-    # n < -10, which never fires, so NOTHING is detached and the graph holds
-    # every block instead of the last few. That is how a config meant for a
-    # 24-row model put a 6-row model out of memory.
-    warn = []
-    if cfg.bptt_window > cfg.max_steps:
-        warn.append(f"bptt_window {cfg.bptt_window} exceeds max_steps "
-                    f"{cfg.max_steps}, so nothing would be detached and the "
-                    f"whole chain would be held. Clamping to {cfg.max_steps}.")
-        cfg.bptt_window = cfg.max_steps
-    if cfg.train_steps_mean and cfg.train_steps_mean >= cfg.max_steps:
-        warn.append(f"train_steps_mean {cfg.train_steps_mean:g} is at or above "
-                    f"max_steps {cfg.max_steps}, so depth sampling saves "
-                    f"nothing - every step runs the ceiling.")
-    if cfg.halt_prior and 1.0 / cfg.halt_prior > cfg.max_steps * 1.5:
-        warn.append(f"halt_prior {cfg.halt_prior:g} pulls toward "
-                    f"{1/cfg.halt_prior:.1f} rows but the model only has "
-                    f"{cfg.max_steps}.")
-    if warn:
-        print(f"  [config] this checkpoint has {cfg.n_recur + cfg.n_coda} "
-              f"block(s) per row and {cfg.max_steps} rows; config.yaml looks "
-              f"written for a different shape:", flush=True)
-        for w in warn:
-            print(f"    - {w}", flush=True)
-    print(f"  gradient reaches back {cfg.bptt_window} of {cfg.max_steps} rows")
-    print(f"  depth: up to {cfg.max_steps} rows, halting prior pulls toward "
-          f"{1/max(cfg.halt_prior,1e-9):.1f} rows, inference stops at "
-          f"{cfg.halt_thresh:g} cumulative")
-    if cfg.train_steps_mean > 0:
-        import torch as _t
-        _n = (_t.poisson(_t.full((20000,), cfg.train_steps_mean)).int() + 1
-              ).clamp(cfg.min_steps, cfg.max_steps).float().mean()
-        print(f"  recurrence depth is SAMPLED while training: mean {_n:.2f} of "
-              f"{cfg.max_steps} ({100*_n/cfg.max_steps:.0f}% of the recurrent "
-              f"compute). Inference still runs all {cfg.max_steps} and lets "
-              f"halting decide.")
+    cfg.euler_steps = int(args.euler_steps)
+    cfg.lambda_anchor = float(args.lambda_anchor)
+
     pool.dying_at = args.dying_at
     _PLOTS.update(on=bool(args.plots), since=args.plot_since,
                   log=args.sample_log, weights=args.weights_dir)
@@ -1885,47 +1835,6 @@ def build_paged(wdir, device, resident=None, ram_capacity=256, ceiling=None,
     return model, cfg, pool, man
 
 
-def cmd_ponder_probe(args):
-    """
-    Does the model actually spend more computation on harder problems?
-
-    This is the falsifiable claim behind adaptive depth. If mean halting steps
-    are flat across difficulty, the halting head learned nothing useful and the
-    mechanism is decoration. Reported per digit count, which is the cleanest
-    difficulty axis available.
-    """
-    import corpora.arithmetic as math_data
-    from minagi.tokenizer import load_tokenizer
-    device = torch.device(args.device)
-    model, ck = load_recur(args.ckpt, device)
-    tok = load_tokenizer(args.data)
-    import random
-    rng = random.Random(0)
-    print(f"{'digits':>7} {'mean steps':>11} {'max':>5}  {'example':<34}")
-    rows = []
-    for d in range(1, args.max_digits + 1):
-        steps = []
-        example = ""
-        for _ in range(args.n):
-            fn, cap, _ = math_data.TASKS[args.task]
-            line = fn(rng, min(d, cap), False)
-            prompt = line.rpartition("=")[0] + "="
-            example = example or prompt
-            ids = torch.tensor([tok.encode(prompt).ids], device=device)
-            with torch.no_grad():
-                _, extra = model(ids, collect=True)
-            steps.append(float(extra["steps"][0, -1]))
-        rows.append((d, float(np.mean(steps)), max(steps)))
-        print(f"{d:>7} {np.mean(steps):>11.2f} {max(steps):>5.0f}  {example:<34}")
-    lo = rows[0][1]
-    hi = rows[-1][1]
-    print(f"\n1-digit {lo:.2f} steps -> {args.max_digits}-digit {hi:.2f} steps "
-          f"({hi-lo:+.2f})")
-    print("adaptive compute is working" if hi - lo > 0.15 else
-          "FLAT - the halting head is not responding to difficulty")
-    return 0
-
-
 def main():
     ap = argparse.ArgumentParser(
         description="train mini-AGI: read files continually, or stream a "
@@ -2141,40 +2050,18 @@ def main():
                          "held-out says the ground moved; this is the manual "
                          "override for when you know it did and it has not "
                          "noticed yet")
-    rd.add_argument("--bptt-window", type=int,
-                    default=_cfg(_c, "model.bptt_window", None),
-                    help="how many of the last ROWS carry gradient back "
-                         "through the recurrence. Counted in rows, so it must "
-                         "be rescaled whenever a row changes size")
-    rd.add_argument("--ponder-beta", type=float,
-                    default=_cfg(_c, "model.ponder_beta", None),
-                    help="weight on the KL that holds halting to its prior")
-    rd.add_argument("--halt-prior", type=float,
-                    default=_cfg(_c, "model.halt_prior", None),
-                    help="geometric prior on depth: the KL pulls the halting "
-                         "head toward a mean of 1/this ROWS. Must be rescaled "
-                         "whenever a row changes size")
-    rd.add_argument("--halt-thresh", type=float,
-                    default=_cfg(_c, "model.halt_thresh", None),
-                    help="at inference, stop at the first row whose cumulative "
-                         "halting mass passes this")
-    rd.add_argument("--min-steps", type=int,
-                    default=_cfg(_c, "model.min_steps", 1),
-                    help="rows a character must run before halting may stop "
-                         "it; config.yaml had this but only the old `train` "
-                         "command ever read it")
+    rd.add_argument("--euler-steps", type=int,
+                    default=_cfg(_c, "model.euler_steps", 10),
+                    help="Number of Euler integration steps during inference")
+    rd.add_argument("--lambda-anchor", type=float,
+                    default=_cfg(_c, "model.lambda_anchor", 1.0),
+                    help="Weight for the anchor cross-entropy loss")
     rd.add_argument("--no-pool-checkpoint", action="store_true",
                     help="stop recomputing the expert pass during backward. "
                          "It trades about 30%% more compute for most of the "
                          "pool's activation memory, which is only worth it "
                          "while depth makes that memory the binding "
                          "constraint")
-    rd.add_argument("--train-steps-mean", type=float,
-                    default=_cfg(_c, "model.train_steps_mean", 0.0),
-                    help="sample the recurrence depth while training instead "
-                         "of always running max_steps; 0 keeps the old "
-                         "behaviour. NOT the mean depth - the draw is "
-                         "poisson(this)+1, so 2.0 averages 3.0 of 6")
     rd.add_argument("--dying-at", type=float,
                     default=_cfg(_c, "prune.dying_at", 0.75),
                     help="share of prune.survival_chars an expert may go "
@@ -2259,14 +2146,6 @@ def main():
                     help="give up after this many reverts rather than thrash")
     st.set_defaults(fn=cmd_stream)
 
-    p = sub.add_parser("ponder-probe")
-    p.add_argument("--ckpt", default="weights",
-                    help="the weights directory, or a .pt checkpoint")
-    p.add_argument("--data", default="data_math_char")
-    p.add_argument("--task", default="add")
-    p.add_argument("--n", type=int, default=20)
-    p.add_argument("--max-digits", type=int, default=8)
-    p.set_defaults(fn=cmd_ponder_probe)
 
     args = ap.parse_args()
     sys.exit(args.fn(args) or 0)

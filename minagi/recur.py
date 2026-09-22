@@ -41,17 +41,12 @@ class RecurConfig(Config):
     n_prelude: int = 1        # blocks before the loop
     n_recur: int = 2          # blocks inside the loop (weight-shared)
     n_coda: int = 1           # blocks after the loop, run per step
-    max_steps: int = 4          # ceiling at inference
-    min_steps: int = 1
-    train_steps_mean: float = 0.0   # 0 = always run max_steps while training
-    bptt_window: int = 4            # backprop through the last N passes only
-    ponder_beta: float = 0.01
-    halt_prior: float = 0.4   # geometric prior on depth; mean ~ 1/halt_prior
-    halt_thresh: float = 0.9  # inference: halt once cumulative exceeds this
+    euler_steps: int = 10       # Number of Euler integration steps during inference
+    lambda_anchor: float = 1.0  # Weight for the anchor cross-entropy loss
 
     @property
     def n_layer_effective(self):
-        return self.n_prelude + self.max_steps * (self.n_recur + self.n_coda)
+        return self.n_prelude + self.euler_steps * (self.n_recur + self.n_coda)
 
 
 class RecurCoder(nn.Module):
@@ -78,12 +73,11 @@ class RecurCoder(nn.Module):
                     capacity_factor=getattr(
                         cfg, 'pool_capacity_factor', 1.5))
                 site += 1
-        # merges the running latent state with the original embedded input, so
-        # the loop cannot drift away from what it is actually reading
-        self.adapter = nn.Linear(2 * cfg.d_model, cfg.d_model, bias=False)
+        # maps [z_t, h_x, t_emb] to d_model to condition the recurrent blocks
+        self.adapter = nn.Linear(3 * cfg.d_model, cfg.d_model, bias=False)
         self.ln_f = RMSNorm(cfg.d_model)
         self.head = nn.Linear(cfg.d_model, cfg.vocab_size, bias=False)
-        self.halt = nn.Linear(cfg.d_model, 1)
+        self.v_proj = nn.Linear(cfg.d_model, cfg.d_model, bias=False)
         if cfg.tie_embeddings:
             self.head.weight = self.tok_emb.weight
 
@@ -105,18 +99,22 @@ class RecurCoder(nn.Module):
             if name.endswith("proj.weight") or name.endswith("w2.weight"):
                 nn.init.normal_(p, 0.0, 0.02 / math.sqrt(2 * depth))
         with torch.no_grad():
-            # [I | I]: the adapter starts as the sum of the latent and the
-            # embedded input, so the first pass sees the text itself and every
-            # later pass accumulates on top of it. The input half is what keeps
-            # the loop anchored - without it the latent, which starts at zero,
-            # would circulate without the text ever entering.
             self.adapter.weight.zero_()
             eye = torch.eye(cfg.d_model)
             self.adapter.weight[:, :cfg.d_model].copy_(eye)
-            self.adapter.weight[:, cfg.d_model:].copy_(eye)
-            # start biased toward pondering rather than halting instantly
-            self.halt.bias.fill_(-2.0)
-            self.halt.weight.mul_(0.01)
+            self.adapter.weight[:, cfg.d_model:2*cfg.d_model].copy_(eye)
+
+    def get_time_embedding(self, t):
+        """Sinusoidal time embeddings."""
+        half_dim = self.cfg.d_model // 2
+        emb = math.log(10000) / (half_dim - 1)
+        emb = torch.exp(torch.arange(half_dim, device=t.device, dtype=torch.float32) * -emb)
+        emb = t.view(-1, 1).float() * emb.unsqueeze(0)
+        emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=-1)
+        # Pad if d_model is odd (though it shouldn't be)
+        if emb.shape[-1] < self.cfg.d_model:
+            emb = F.pad(emb, (0, self.cfg.d_model - emb.shape[-1]))
+        return emb
 
     @staticmethod
     def _init(m):
@@ -213,38 +211,15 @@ class RecurCoder(nn.Module):
     def empty_caches(self):
         return [{"k": None, "v": None} for _ in range(self.n_slots())]
 
-    def sample_depth(self):
-        """
-        How many passes to run for this batch.
-
-        PonderNet computes every pass up to the ceiling and weights them by the
-        halting distribution, so cost scales with the ceiling whether or not a
-        token needed the depth. While reading, the depth is drawn per batch
-        from a Poisson with mean `train_steps_mean` and clamped to
-        [min_steps, max_steps]: the average cost stays near the mean while the
-        model still sees deep passes often enough to learn to use them.
-
-        Inference runs the full ceiling and lets halting decide per character.
-        """
-        c = self.cfg
-        if not self.training or c.train_steps_mean <= 0:
-            return c.max_steps
-        n = int(torch.poisson(torch.tensor(float(c.train_steps_mean))).item()) + 1
-        return max(c.min_steps, min(c.max_steps, n))
-
     def forward(self, idx, targets=None, caches=None, pos_offset=0,
                 collect=False):
         cfg = self.cfg
         B, T = idx.shape
         x = self.tok_emb(idx)
         if pos_offset + T > self.rope_cos.shape[0]:
-            # Reading past the rotary tables gives an empty slice and a
-            # shape error four frames deeper, which says nothing useful
             raise ValueError(
                 f"reading at position {pos_offset + T:,} but the rotary "
-                f"tables were built to {self.rope_cos.shape[0]:,}. The window "
-                f"may not exceed the ceiling the model was built with "
-                f"(model.context_end in config.yaml).")
+                f"tables were built to {self.rope_cos.shape[0]:,}.")
         cos = self.rope_cos[pos_offset:pos_offset + T]
         sin = self.rope_sin[pos_offset:pos_offset + T]
 
@@ -256,97 +231,87 @@ class RecurCoder(nn.Module):
             x = blk(x, cos, sin, slot(ci))
             ci += 1
 
-        h = torch.zeros_like(x)
-        cum = torch.ones(B, T, 1, device=x.device, dtype=torch.float32)
-        loss_terms, p_terms = [], []
-        halted_logits = None
-        halted = torch.zeros(B, T, 1, device=x.device, dtype=torch.bool)
-        steps_used = torch.zeros(B, T, device=x.device)
-        per_step = []
+        h_x = x  # Clean context from prelude
 
-        n_steps = self.sample_depth()
-        for n in range(n_steps):
-            # truncated backprop: only the last few passes carry gradient, so
-            # memory does not grow with depth
-            if (targets is not None and cfg.bptt_window > 0
-                    and n < n_steps - cfg.bptt_window):
-                h = h.detach()
-            h = self.adapter(torch.cat([h, x], dim=-1))
+        if targets is not None:
+            # Training: NoProp-FM continuous time dynamics
+            u_y = self.tok_emb(targets)
+
+            # Sample time t ~ U[0, 1]
+            t = torch.rand(B, 1, 1, device=x.device, dtype=x.dtype)
+
+            # Sample initial noise z_0 ~ N(0, I)
+            z_0 = torch.randn_like(u_y)
+
+            # Interpolate to get noisy state z_t
+            z_t = t * u_y + (1 - t) * z_0
+
+            # Get time embedding
+            t_emb = self.get_time_embedding(t.view(B, 1))
+            t_emb = t_emb.expand(B, T, -1)
+
+            # Pass through single recurrent block (acting point-wise, no self-attention)
+            # Concat z_t, h_x, and t_emb
+            h = self.adapter(torch.cat([z_t, h_x, t_emb], dim=-1))
+
+            ci_recur_start = ci
             for blk in self.recur:
-                h = blk(h, cos, sin, slot(ci))
+                h = blk(h, cos, sin, slot(ci), use_attn=False)
                 ci += 1
-            y = h
             for blk in self.coda:
-                y = blk(y, cos, sin, slot(ci))
+                h = blk(h, cos, sin, slot(ci), use_attn=False)
                 ci += 1
-            yf = self.ln_f(y)
-            logits_n = self.head(yf)
 
-            lam = torch.sigmoid(self.halt(yf).float())          # [B,T,1]
-            if n == n_steps - 1:
-                lam = torch.ones_like(lam)                      # must stop
-            elif n < cfg.min_steps - 1:
-                lam = torch.zeros_like(lam)                     # must continue
-            p_n = cum * lam
-            cum = cum * (1.0 - lam)
+            yf = self.ln_f(h)
+            v_theta = self.v_proj(yf)
 
-            if targets is not None:
-                ce = F.cross_entropy(
-                    logits_n.reshape(-1, logits_n.size(-1)).float(),
-                    targets.reshape(-1), reduction="none").view(B, T)
-                loss_terms.append(p_n.squeeze(-1) * ce)
-                p_terms.append(p_n.squeeze(-1))
-                # the halting-weighted mixture of every depth's logits, so
-                # what is returned is what the model would actually emit
-                term = logits_n * p_n.to(logits_n.dtype)
-                halted_logits = (term if halted_logits is None
-                                 else halted_logits + term)
-            else:
-                # Each token halts on its own schedule: the first step whose
-                # cumulative halting mass crosses the threshold is the one
-                # whose logits that token keeps. The forced lam=1 on the last
-                # step guarantees every token halts somewhere.
-                if halted_logits is None:
-                    halted_logits = logits_n.clone()
-                    steps_used = torch.ones(B, T, device=x.device)
-                newly = (~halted) & ((1.0 - cum) >= cfg.halt_thresh)
-                if bool(newly.any()):
-                    halted_logits = torch.where(newly, logits_n, halted_logits)
-                    steps_used = torch.where(
-                        newly.squeeze(-1),
-                        torch.full_like(steps_used, float(n + 1)), steps_used)
-                halted = halted | newly
-            if collect:
-                per_step.append({"step": n + 1,
-                                 "halt_p": float(p_n.mean()),
-                                 "cum": float((1 - cum).mean())})
+            # Flow Matching Loss
+            # Target vector field is (u_y - z_0)
+            target_v = u_y - z_0
+            loss_fm = F.mse_loss(v_theta.float(), target_v.float(), reduction='none').mean()
 
-        # what this stretch of text looked like, for the next segment's choice
-        self.end_segment(x)
+            # Anchor Loss (Extrapolated Linear Estimate)
+            z_hat_1 = z_t + (1 - t) * v_theta
+            logits = self.head(z_hat_1)
+            loss_anchor = F.cross_entropy(
+                logits.reshape(-1, logits.size(-1)).float(),
+                targets.reshape(-1), reduction="none").mean()
 
-        if targets is None:
-            out = {"steps": steps_used} if collect else None
-            if collect:
-                out["per_step"] = per_step
-            return halted_logits, out
+            loss = loss_fm + cfg.lambda_anchor * loss_anchor
 
-        # PonderNet: expected loss under the halting distribution, plus a KL
-        # pull toward a geometric prior so it does not simply always run long.
-        P = torch.stack(p_terms, 0)                              # [N,B,T]
-        L = torch.stack(loss_terms, 0)
-        loss = L.sum(0).mean()
-        prior = torch.tensor(
-            [cfg.halt_prior * (1 - cfg.halt_prior) ** n
-             for n in range(len(p_terms))], device=x.device)
-        prior = (prior / prior.sum()).view(-1, 1, 1)
-        kl = (P.clamp_min(1e-8) * (P.clamp_min(1e-8).log() - prior.log())).sum(0)
-        loss = loss + cfg.ponder_beta * kl.mean()
-        steps = (P * torch.arange(1, len(p_terms) + 1, device=x.device)
-                 .view(-1, 1, 1)).sum(0)
-        self.last_steps = float(steps.mean())
-        # logits are the halting-weighted mixture, so top-1 accuracy measured
-        # downstream reflects what the model would actually have emitted
-        return halted_logits, loss
+            self.end_segment(h_x)
+            self.last_steps = 1.0 # only 1 step during training
+            return logits, loss
+        else:
+            # Inference: Euler integration over euler_steps
+            z_t = torch.randn_like(h_x)
+            dt = 1.0 / cfg.euler_steps
+
+            for step in range(cfg.euler_steps):
+                t_val = step * dt
+                t = torch.full((B, 1, 1), t_val, device=x.device, dtype=x.dtype)
+                t_emb = self.get_time_embedding(t.view(B, 1)).expand(B, T, -1)
+
+                h = self.adapter(torch.cat([z_t, h_x, t_emb], dim=-1))
+
+                ci = len(self.prelude)
+                for blk in self.recur:
+                    h = blk(h, cos, sin, slot(ci), use_attn=False)
+                    ci += 1
+                for blk in self.coda:
+                    h = blk(h, cos, sin, slot(ci), use_attn=False)
+                    ci += 1
+
+                yf = self.ln_f(h)
+                v_theta = self.v_proj(yf)
+                z_t = z_t + dt * v_theta
+
+            logits = self.head(z_t)
+
+            self.end_segment(h_x)
+
+            out = {"steps": torch.full((B, T), float(cfg.euler_steps), device=x.device)} if collect else None
+            return logits, out
 
     @torch.no_grad()
     def choose_for(self, idx, free=False):

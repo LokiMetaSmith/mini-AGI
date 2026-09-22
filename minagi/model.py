@@ -149,7 +149,8 @@ class Block(nn.Module):
         self.ln2 = RMSNorm(cfg.d_model)
         self.mlp = SwiGLU(cfg)
 
-    def forward(self, x, cos, sin, cache=None):
-        x = x + self.attn(self.ln1(x), cos, sin, cache)
+    def forward(self, x, cos, sin, cache=None, use_attn=True):
+        if use_attn:
+            x = x + self.attn(self.ln1(x), cos, sin, cache)
         x = x + self.mlp(self.ln2(x))
         return x
