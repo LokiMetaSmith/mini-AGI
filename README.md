@@ -213,14 +213,24 @@ The right panel shows which subjects are still moving. Code, chat, stories and r
     git clone <repository-url>
     cd mini-AGI
     ```
-3. Install the dependencies:
-    ```bash
+3. Setup the python virtual environment and install dependencies:
+
+    # On Linux/macOS
+    ./setup_venv.sh
+
+    # On Windows
+    setup_venv.bat
+
+    This script will create a virtual environment inside a `venv` folder and install all the required packages (`torch`, `numpy`, `pyyaml`, `matplotlib`, `flask`, `tokenizers`, `chess`, `zstandard`, `scipy`).
+    *Note: PyTorch installed via pip defaults to the latest available CUDA version. If you require a specific version to match your local CUDA toolkit, see [the PyTorch install page](https://pytorch.org/get-started/locally/). The reference environment is torch 2.6.0+cu124 with numpy 1.24.4.*
+
+    # Or Manually
+    ```bash 
     pip install torch numpy pyyaml matplotlib      # the model, and its graphs
     pip install flask                              # serve.py
     pip install chess zstandard datasets           # building corpora
     pip install scipy                              # a few of the analysis tools
     ```
-    PyTorch has to match your CUDA version - see [the PyTorch install page](https://pytorch.org/get-started/locally/). The reference environment is torch 2.6.0+cu124 with numpy 1.24.4. Only the first line is needed to train.
 4. Build the corpus. One command downloads the four public datasets and generates the other four lanes:
     ```bash
     python3 -m corpora all                  # all eight subjects, a few GB
