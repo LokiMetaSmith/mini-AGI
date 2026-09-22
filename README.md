@@ -35,7 +35,7 @@ Characters (bytes) does not pass through a fixed stack of layers as it would be 
 
 Three distinct blocks, up to 26 block-applications per character.
 
-- **Adaptive depth.** A halting head scores every character at every row, and the character stops as soon as another row would not change the answer. Easy characters take one row, hard ones take many. This is the PonderNet recipe: while training, every depth is computed and weighted by its halting probability, so the halting head learns through those weights.
+- **NoProp-FM Continuous-Time Denoising.** Instead of adaptive depth per character, this architecture uses a Flow Matching objective to integrate the latent representations through a vector field via Euler integration. Backpropagation through time (BPTT) is eliminated.
 - **Routing per block-application, not per character.** Each of the 26 applications picks its own top-8 experts, so one character touches far more of the pool than "top-8" suggests, and the same expert can be selected several times at different depths. What varies is *which* eight at each point.
 - **No expert is assigned a subject.** There are no labels anywhere. Soft top-k routing distributes capability across the pool by itself, and a character can combine fragments from several experts. The cost is that capabilities share parameters and so *can* interfere.
 
@@ -250,7 +250,6 @@ python3 -m corpora expand                          # .bin -> the text files read
 
 python3 train.py read --help                       # every knob the reader has
 python3 train.py stream --steps 140000 --lr 2e-4   # the packed-corpus path
-python3 train.py ponder-probe --ckpt weights       # depth against difficulty
 ```
 
 Every tool takes `--ckpt weights` - the directory is the model, and there are no `.pt` files to keep track of.
@@ -318,8 +317,8 @@ Byte level - vocabulary 265: the 256 byte values plus 9 structural markers (`<th
 |---|---|
 | body | RMSNorm, RoPE, SwiGLU, flash attention via `scaled_dot_product_attention` |
 | depth | 3 distinct blocks, up to 26 block-applications per character |
-| recurrence | one weight-shared block applied up to 24 times; the latent is never decoded |
-| halting | PonderNet - each character halts independently, so hard ones get more depth |
+| recurrence | one weight-shared block applied over euler_steps; the latent is never decoded |
+| diffusion | NoProp-FM continuous-time flow matching dynamics replacing standard BPTT autoregression |
 | routing | top-8 experts per block-application, chosen per character |
 | paging | 32 experts resident on the card; the rest live on disk |
 
@@ -347,7 +346,7 @@ The parts the model is built out of:
 
 [Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer](https://arxiv.org/abs/1701.06538) - Shazeer et al., 2017. The entire expert pool, and the load-balancing auxiliary loss.  
 [Switch Transformers](https://arxiv.org/abs/2101.03961) - Fedus et al., 2021. The capacity-based batched dispatch, which is what lets the pool run as three matrix multiplies.  
-[PonderNet: Learning to Ponder](https://arxiv.org/abs/2107.05407) - Banino et al., 2021. The adaptive depth mechanism.  
+[NoProp: No Backpropagation in Sequential and Deep Targets](https://arxiv.org/abs/2503.24322) - Li, Teh, & Pascanu, 2025. The continuous-time vector field dynamics (Flow Matching).
 [RoFormer: Rotary Position Embedding](https://arxiv.org/abs/2104.09864) - Su et al., 2021. Why the context window can grow by continued training.  
 [GLU Variants Improve Transformer](https://arxiv.org/abs/2002.05202) - Shazeer, 2020. SwiGLU.  
 [Root Mean Square Layer Normalization](https://arxiv.org/abs/1910.07467) - Zhang & Sennrich, 2019.  
