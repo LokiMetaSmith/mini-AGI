@@ -233,7 +233,7 @@ def build_prompt(messages, budget, prime=""):
 
 
 @torch.no_grad()
-def stream(prompt, max_new):
+def stream(prompt, max_new, euler_steps=None):
     from minagi.config import get as _g, load as _lc
     from minagi.decode import pick_next
     from minagi.stream import trim_caches
@@ -263,6 +263,12 @@ def stream(prompt, max_new):
         return 0
 
     model, tok = STATE["model"], STATE["tok"]
+
+    # Temporarily override euler_steps if requested
+    orig_euler_steps = model.cfg.euler_steps
+    if euler_steps is not None:
+        model.cfg.euler_steps = int(euler_steps)
+
     device = next(model.parameters()).device
     ids = tok.encode(prompt).ids[-model.cfg.block:]
     out = torch.tensor([ids or [10]], device=device)
@@ -317,6 +323,8 @@ def stream(prompt, max_new):
             break
         yield {"t": tok.decode([produced[-1]])}
 
+    model.cfg.euler_steps = orig_euler_steps
+
 
 def remember(user_text, bot_text):
     """
@@ -366,6 +374,7 @@ def api_chat():
     msgs = body.get("messages", [])
     prompt = build_prompt(msgs, int(model.cfg.block * 0.9), PRIME)
     max_new = int(body.get("max_new", 400))
+    euler_steps = body.get("euler_steps")
     # the half of the exchange the model did not predict, which is where the
     # signal in a conversation is
     last_user = next((m.get("content") for m in reversed(msgs)
@@ -377,7 +386,7 @@ def api_chat():
         learned = None
         try:
             with LOCK:
-                for ev in stream(prompt, max_new):
+                for ev in stream(prompt, max_new, euler_steps=euler_steps):
                     if "t" in ev:
                         n += 1
                         reply.append(ev["t"])
@@ -557,6 +566,11 @@ PAGE = r'''<!doctype html>
 <div id="log"><div class="wrap"><div id="primebox"></div><div id="thread"></div></div></div>
 
 <footer>
+  <div style="max-width:720px; margin:0 auto; padding-bottom:10px; display:flex; gap:10px; align-items:center;">
+    <label for="euler-steps" style="font-size:12px; color:var(--dim);">Euler Integration Steps:</label>
+    <input type="range" id="euler-steps" min="1" max="24" value="10" oninput="document.getElementById('euler-val').textContent=this.value" style="flex-grow:1;">
+    <span id="euler-val" style="font-size:12px; font-variant-numeric:tabular-nums; width:20px; color:var(--dim);">10</span>
+  </div>
   <form id="f">
     <textarea id="q" rows="1" placeholder="Say something"></textarea>
     <button id="send" type="submit">Send</button>
@@ -718,9 +732,10 @@ document.getElementById('f').onsubmit = async (e) => {
 
   let reply = '';
   try {
+    const euler_steps = parseInt(document.getElementById('euler-steps').value, 10);
     const r = await fetch('/api/chat', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({messages, max_new: 400})
+      body: JSON.stringify({messages, max_new: 400, euler_steps: euler_steps})
     });
     const reader = r.body.getReader();
     const dec = new TextDecoder();

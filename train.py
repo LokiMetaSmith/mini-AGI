@@ -276,6 +276,12 @@ def cmd_stream(args):
                   f"lr {lr:.2e} gn {float(gn):.2f} ctx {streams.context//1024}k "
                   f"{seen/el/1e3:.1f}k char/s{vram}{rp}", flush=True)
 
+        if (step + 1) % args.save_every == 0 and step > start_step:
+            weights_store.save(model, wdir, step=step, val=best, opt=opt,
+                               cfg=asdict(cfg), verbose=True)
+            record("saved", step=step, val=best)
+            print(f"  weights/ checkpointed at step {step:,}", flush=True)
+
         if (step + 1) % args.eval_every == 0 or step + 1 == args.steps:
             v = evaluator.run(args.eval_chunks)
             se = v.pop("stderr", 0.0)
@@ -2127,6 +2133,8 @@ def main():
     st.add_argument("--steps", type=int, default=20000)
     st.add_argument("--lr", type=float, default=1e-4)
     st.add_argument("--trunk-lr-mult", type=float, default=0.3)
+    st.add_argument("--save-every", type=int, default=1000,
+                    help="steps between writing the weights out")
     st.add_argument("--warmup", type=int, default=200)
     st.add_argument("--wd", type=float, default=0.1)
     st.add_argument("--clip", type=float, default=1.0)
