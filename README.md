@@ -225,7 +225,7 @@ The right panel shows which subjects are still moving. Code, chat, stories and r
     *Note: PyTorch installed via pip defaults to the latest available CUDA version. If you require a specific version to match your local CUDA toolkit, see [the PyTorch install page](https://pytorch.org/get-started/locally/). The reference environment is torch 2.6.0+cu124 with numpy 1.24.4.*
 
     # Or Manually
-    ```bash 
+    ```bash
     pip install torch numpy pyyaml matplotlib      # the model, and its graphs
     pip install flask                              # serve.py
     pip install chess zstandard datasets           # building corpora
