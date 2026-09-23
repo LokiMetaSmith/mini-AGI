@@ -32,6 +32,10 @@ REM Install dependencies
 echo Installing dependencies...
 pip install torch numpy pyyaml matplotlib flask tokenizers chess zstandard scipy
 
+REM Option to install torch-directml for AMD GPUs on Windows
+echo If you have an AMD GPU and want to use DirectML, run:
+echo pip install torch-directml
+
 echo.
 echo Setup complete! To activate the environment, run:
 echo %VENV_DIR%\Scripts\activate
