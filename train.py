@@ -1839,7 +1839,8 @@ def main():
     ap = argparse.ArgumentParser(
         description="train mini-AGI: read files continually, or stream a "
                     "packed corpus. Batch 1, cached, chunked, either way")
-    ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu",
+                    help="Device to use (e.g., 'cuda', 'cpu', or 'privateuseone:0' for DirectML)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     rd = sub.add_parser("read",

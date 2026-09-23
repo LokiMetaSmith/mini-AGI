@@ -207,7 +207,7 @@ The right panel shows which subjects are still moving. Code, chat, stories and r
 
 ## Running it
 
-1. Make sure you have a CUDA-capable GPU with at least 8 GB of VRAM, and Python 3.10 or newer. The reference machine is an RTX 3070 Laptop GPU with 8 GB.
+1. Make sure you have a CUDA-capable GPU with at least 8 GB of VRAM, and Python 3.10 or newer. The reference machine is an RTX 3070 Laptop GPU with 8 GB. (If using an AMD GPU on Windows, see the DirectML/CPU fallback notes below).
 2. Clone the repository:
     ```bash
     git clone <repository-url>
@@ -223,6 +223,11 @@ The right panel shows which subjects are still moving. Code, chat, stories and r
 
     This script will create a virtual environment inside a `venv` folder and install all the required packages (`torch`, `numpy`, `pyyaml`, `matplotlib`, `flask`, `tokenizers`, `chess`, `zstandard`, `scipy`).
     *Note: PyTorch installed via pip defaults to the latest available CUDA version. If you require a specific version to match your local CUDA toolkit, see [the PyTorch install page](https://pytorch.org/get-started/locally/). The reference environment is torch 2.6.0+cu124 with numpy 1.24.4.*
+
+    **AMD GPU on Windows Fallback:**
+    If you are running Windows with an AMD GPU, the default PyTorch CUDA wheel will fail to initialize `c10.dll`. You have two options:
+    - **Option 1 (CPU):** Uninstall the CUDA version and install the CPU version: `pip uninstall torch torchvision torchaudio` then `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu`.
+    - **Option 3 (DirectML):** Install the DirectML backend with `pip install torch-directml`. Then when running any script, pass the `--device privateuseone:0` argument (e.g. `python3 train.py read ... --device privateuseone:0`).
 
     # Or Manually
     ```bash
