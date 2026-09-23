@@ -105,6 +105,10 @@ def cmd_stream(args):
     buys is roughly an order of magnitude of context on the same card.
     """
 
+
+    if args.device.startswith("privateuseone"):
+        import torch_directml
+
     device = torch.device(args.device)
     torch.manual_seed(args.seed)
     rng = np.random.default_rng(args.seed)
@@ -599,6 +603,9 @@ def cmd_read(args):
     from minagi.ingest import collect, summarise
     from minagi.stream import FolderEvaluator
     from minagi.precision import set_compute_dtype
+
+    if args.device.startswith("privateuseone"):
+        import torch_directml
 
     device = torch.device(args.device)
     torch.manual_seed(args.seed)
