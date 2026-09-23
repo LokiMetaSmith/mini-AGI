@@ -227,7 +227,7 @@ The right panel shows which subjects are still moving. Code, chat, stories and r
     **AMD GPU on Windows Fallback:**
     If you are running Windows with an AMD GPU, the default PyTorch CUDA wheel will fail to initialize `c10.dll`. You have two options:
     - **Option 1 (CPU):** Uninstall the CUDA version and install the CPU version: `pip uninstall torch torchvision torchaudio` then `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu`.
-    - **Option 3 (DirectML):** Install the DirectML backend with `pip install torch-directml`. Then when running any script, pass the `--device privateuseone:0` argument (e.g. `python3 train.py read ... --device privateuseone:0`).
+    - **Option 3 (DirectML):** Install the DirectML backend with `pip install torch-directml`. Then when running any script, pass the `--device privateuseone:0` argument **before** the subcommand (e.g. `python3 train.py --device privateuseone:0 read ...`).
 
     # Or Manually
     ```bash
