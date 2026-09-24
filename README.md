@@ -1,9 +1,11 @@
 # mini-AGI
 
 mini-AGI - is a **continual learning** byte-level language model that assembles its own architecture, trains from scratch on a single 8 GB VRAM GPU, and keeps learning from everything it reads.
-It stores its weights as ordinary files on disk and pages them onto the card as it needs them, so the parameter count is bounded by free disk space rather than by VRAM. It grows new capacity while training when it runs short, prunes what nothing asks for, and reads through exactly the same code path it serves on. Targeted at a PC or laptop with at least an 8 GB VRAM GPU on the board.
+It stores its weights as ordinary files on disk and pages them onto the card as it needs them, so the parameter count is bounded by free disk space rather than by VRAM. It grows new capacity while training when it runs short, prunes what nothing asks for, and reads through exactly the same code path it serves on. Targeted at a PC or laptop with at least an 8 GB VRAM GPU on the board. 
 
 **NOTE: as of now this is a small toy-level model.** Do not expect a frontier level capabilities. This is rather a small experiment to show, that continual learning from the single stream of data without catastrophic forgetting is possible. Furthermore it is possible on a modest hardware. Which means that almost everyone could train their own version of the model (or simply continue training this one) exactly as they see it fit. And the capabilities would be bounded by the actual hardware, scale and quality of the data available and the amount of time one willing to spend on training the model.
+
+*The name is a half-joke and not a statement of the current capabilities of the model, but rather the potential and traits it has. Continual single-stream learning and natural size and processing adaptation to the available resources exactly what I myself expect from an AGI to have. It has an exceptionally small VRAM footprint and hence it is “mini-AGI”.*
 
 ![dashboard](assets/dashboard.png)
 *Here is how min-run dashboard looks like. The model is pointed to the corpus to constantly read and learn from.*
@@ -11,6 +13,142 @@ It stores its weights as ordinary files on disk and pages them onto the card as 
 [History](runs/samples.txt) - here is the samples from the whole training run history so far. You can inspect them yourself to see how the model improved over the course of training/reading the corpus. 
 
 The weights are **not published yet**. The run is still reading its first pass over the corpus, the weights go up once it has been through all of it, which is a couple of weeks away at the current rate.
+
+<!-- auto:run-blocks -->
+<details>
+<summary><b>Graph of the whole run so far</b></summary>
+
+![training progress](assets/training_progress.png)
+
+*Every sample round of the run to date: 456.2M characters over 961 evaluations.*
+
+</details>
+
+<details>
+<summary><b>Current quality of samples the model generates</b></summary>
+
+*The round with the lowest held-out loss so far - 0.7739 nats at 453.2M characters. Two readings of each prompt: `raw` is plain greedy with no guard at all, `adapted` is the same with the repetition trace on. The whole history is in [runs/samples.txt](runs/samples.txt).*
+
+```
+==============================================================================
+step 221,648   453.2M of 7,879M characters (5.75%)   105 min   174 experts
+context 4,096 characters of 4,096   reading 841 char/s   still gaining +0.0518 deep into it
+grad norm 1.04 against a clip of 1   clipping
+train loss 0.6346   lr 1.79e-04   evidence t +2.52 over 65.7 (effect +0.0561)   rate x0.598
+held-out loss 0.7739 +/-0.0337 nats   1.1164 bits/char   perplexity 2.17   gap +0.1392
+  arithmetic 0.638   chat 0.762   chat_hermes 1.124   chess 0.504   code 0.652   reasoning 0.705   stories 0.558   wikipedia 1.248
+repeats 36% of 8-grams, greedy with no guard
+==============================================================================
+
+--- stories ---
+prompt: 'Once upon a time, there was a little boy named Tom. One day he '
+[raw]  repeated 8-grams 6%
+was playing in his garden when he saw a big bird. He was so excited to see it and he wanted to see it up close.
+
+He stopped to start to star
+[adapted]  repeated 8-grams 14%
+was playing outside when he saw another boy. He was very happy.
+
+Tom wanted to play with the boy. He wanted to play with it.
+
+He ran outside
+
+--- code ---
+prompt: 'def merge_sorted(a, b):\n    '
+[raw]  repeated 8-grams 66%
+    """
+        Convert a sorted sorted sorted sorted sorted sorted sorted
+        sorted sorted sorted sorted sorted sorted sorted sorted s
+[adapted]  repeated 8-grams 24%
+"""
+    Computes anything formatively defined bytes.
+    """
+    a,j_types, bytes_dict = a
+
+    formats, bytes_dict = a
+
+    formats, bytes_
+
+--- arithmetic ---
+prompt: 'add 4917 + 388 = '
+[raw]  repeated 8-grams 86%
+5295
+add 7 + 0 = 7
+add 7 + 0 = 7
+add 7 + 0 = 7
+add 7 + 0 = 7
+add 7 + 0 = 7
+add 7 + 0 = 7
+add 7 + 0 = 7
+add 7 + 0 = 7
+add 7 + 0 = 7
+add 7 + 0
+[adapted]  repeated 8-grams 0%
+5205
+sub 769143 - 208576 = <think> 3-6-0=7b1 4-7-1=6b1 1-5-1=5b1 9-8-1=0b0 6-0-0=6b0 7-2-0=5b0 </think> 560567
+add 394128 + 706539 = 1100667
+sub 249358 -
+
+--- chat ---
+prompt: '<user>\nWhat are you?\n</user>\n<bot>\n'
+[raw]  repeated 8-grams 0%
+I am mini-AGI. I read and write one character at a time. My alphabet is the argument I am in -u" reads a number a new expert is united as a 
+[adapted]  repeated 8-grams 0%
+In a directory of 512 into 2048 hidden units, one gating the other through a single card, and the lines I'm going to find them.
+</bot>
+<user>
+What is 
+
+--- chat_hermes ---
+prompt: '<user>\nA train travels 60 km in 45 minutes. What is its speed in km/h?\n</user>\n<bot>\n'
+[raw]  repeated 8-grams 69%
+The speed in km/h is a traveler whose speed is a traveler whose speed is a traveler whose speed is a traveler whose speed is a traveler whos
+[adapted]  repeated 8-grams 31%
+The speed in km/h, which represents km/h, which represents km/h, which represents km/h.
+</bot>
+<user>
+Write a function that returns all positive funct
+
+--- reasoning ---
+prompt: '<user>\nWrite a Python function that returns the largest number in a list.\n</user>\n<bot>\n<think>\n'
+[raw]  repeated 8-grams 46%
+Okay, let's see. I need to find the largest number in a list. So the largest number is a list. So the largest number is a list. So the large
+[adapted]  repeated 8-grams 16%
+Okay, let's see. I need to find the largest number in a list.
+
+The largest number is at least 1, which is at least 1.
+</bot>
+<user>
+What is the larges
+
+--- wikipedia ---
+prompt: '== History ==\nThe [[Roman Empire]] was '
+[raw]  repeated 8-grams 49%
+a [[Roman Empire]] in [[Roman Empire]] and a [[Roman Empire]] in [[Roman Empire]]. The result of the [[Roman Empire]] was a [[Roman Empire]]
+[adapted]  repeated 8-grams 66%
+the [[Roman Empire]] whose [[Roman Empire]] was the [[Roman Empire]].
+*[[Roman Empire]] was the [[Roman Empire]] whose [[Roman Empire]] was 
+
+--- chess ---
+prompt: '<g>1700 1-0 1. e4 e5 2. '
+[raw]  repeated 8-grams 0%   23 legal moves, then Rad8
+Nf3 Nc6 3. Bb5 a6 4. Ba4 b5 5. Bb3 Nf6 6. O-O Be7 7. Re1 O-O 8. c3 d5 9. exd5 Nxd5 10. Bc2 Bd6 11. Ne5 Bxe5 12. Rxe5 Qd6 13. Re1 Rad8 14. Qe
+[adapted]  repeated 8-grams 0%   24 legal moves, then 14
+Nf3 d6 3. Bc4 h6 4. O-O Ne7 5. d4 exd4 6. Nxd4 c5 7. Nf3 Be6 8. Bxe6 fxe6 9. Nc3 Qb6 10. Nd5 Qxb2 11. Rab1 Qxc3 12. Rxb7 Qa5 13. Rxc7 Qb4 14
+
+--- self-knowledge ---
+prompt: '<user>\nhow do you decide which experts to use?\n</user>\n<bot>\n'
+[raw]  repeated 8-grams 2%
+Adam with decoupled weight decay. The rate follows no schedule at all, because a schedule needs an end to anneal toward and I do not have on
+[adapted]  repeated 8-grams 2%
+Adam with decoupled weight decay. The rate follows no schedule at all, because a schedule nearly all characters size that gate.
+</bot>
+<user>
+what is
+```
+
+</details>
+<!-- /auto:run-blocks -->
 
 ## Motivation
 
@@ -102,37 +240,101 @@ A new expert is safe for a full survival window no matter what, so it cannot be 
 
 ## How continual learning works
 
-Training on a single stream, one subject at a time, is the classic recipe for catastrophic forgetting. Reading half a million characters of chess at the experts' own learning rate takes the other seven subjects from 1.12 to 3.73 nats.
+Training on a single stream, one subject at a time, is the classic recipe for catastrophic forgetting. The test here is deliberately the worst case: the model is switched cold onto **PG19** - 19th-century novels, a domain it has never read - and made to read **1,048,576 consecutive characters of it and nothing else**, at batch 1.
 
-**The trunk learning rate is the mechanism.** The trunk - embeddings, attention, routers, the halting head - is the part every character passes through, and it carries 97.6% of the squared gradient norm. Running it at 0.1x the experts' rate takes forgetting from +2.2300 to +0.0067 nats, which is 99.84% of progress retained against chance.
+**The trunk learning rate is the mechanism.** The trunk - embeddings, attention, routers, the halting head - is the part every character passes through, and it carries **98% of the squared gradient norm**. Running it at 0.1x the experts' rate is the difference between a model that absorbs a new domain and one that is wrecked by it.
 
-| configuration | unread subjects | retained vs chance |
-|---|---|---|
-| working set frozen, trunk LR = expert LR | +2.5871 | 42.88% |
-| swapping, trunk LR = expert LR | +2.2300 | 50.68% |
-| **swapping, trunk at 0.1x - what the run uses** | **+0.0067** | **99.84%** |
-| *control: all seven subjects read* | *-0.0077* | *-* |
+| configuration | PG19, the new domain | the 8 it already knew | learned per nat forgotten | retained vs chance |
+|---|---|---|---|---|
+| working set frozen, trunk LR = expert LR | -0.2909 | +1.2663 | 0.23 | 74.12% |
+| swapping, trunk LR = expert LR | -0.3106 | +1.2628 | 0.25 | 74.25% |
+| **swapping, trunk at 0.1x - what the run uses** | **-0.4216** | **+0.1297** | **3.25** | **97.30%** |
+| *interleaved: PG19 added as a 9th lane* | *-0.3124* | *-0.0065* | *nothing forgotten* | *100.13%* |
 
-![Forgetting under three configurations](assets/mitigations.png)
+The fourth column is the exchange rate: nats gained on the new domain for every nat lost across the eight. **The mitigated configuration is 13x better at that trade than either unmitigated one** - and interleaved there is no trade at all.
 
-**This is the measurement the whole design rests on.** The model reads 524,000 characters of chess and nothing else, at batch 1, and the y-axis on the left is what happened to the **seven subjects it did not read** - zero means nothing was forgotten, up means worse. Three lines, one variable each. Two of them climb to +2.2 and +2.6 nats, which is the model losing most of what it knew. The third, at a trunk learning rate one tenth of the experts', never leaves the floor: **+0.0067 nats after half a million characters of a single subject**.
+![Reading a new domain under three configurations](assets/mitigations.png)
 
-The grey dashed line is the control - the same probe with all seven subjects read, where forgetting is impossible by construction. 
+**This is the measurement the whole design rests on.** Panel A is what happened to the **eight subjects the model did not read** - zero means nothing was forgotten. Two configurations climb to +1.27 nats, which is the model losing most of what it knew. The third, at a trunk learning rate one tenth of the experts', reaches **+0.13 after more than a million characters of a single unfamiliar domain**.
 
-The right panel converts the same three arms into progress retained against chance. The gap between 50.68% and 99.84% is one number in a config file.
+Panel B: **what it learned while it was there**. The mitigated configuration is not trading plasticity for retention - it learns PG19 *faster* than either unmitigated arm, **-0.4216 nats against -0.3106 and -0.2909**, while forgetting ten times less. Slowing the trunk does not slow learning. It accelerates it, because the trunk stops being dragged around by every passage and the experts are free to specialise.
 
-Two readings matter here, and the second one corrects this project's own earlier account:
+### This is a worst case, not a use case
 
-- **The expert pool is not what prevents forgetting.** Freezing the working set - removing the one property that makes the pool a pool - costs only 0.3571 nats, 13.8% of the effect. In that arm 93 of 136 experts received no gradient at all and the model still collapsed. Preserving most of the weights is not sufficient.
-- **The damage is displacement, not destruction.** Damage the model badly and then read everything again: three quarters of it comes back in 131,000 characters, against the ~50M characters it took to learn those subjects the first time. Knowledge that had to be relearned does not come back 380x faster. "Catastrophic" describes how it looks at the bottom of the curve, not what happened to the weights.
+A million consecutive characters of one subject is **32 passages back to back**. The run never does this: it reads a passage of 32,768 characters, moves to another subject, and comes back to the first about every 262,144 characters. It is the analogous to a person who does one thing for a solid week and a person who changes activity through the day. 
+
+Nothing in normal use looks like the massed arm either. A conversation wanders, and a model reading your files reads whatever is there. Such regime only arises deliberately - a bot specialised on one subject and fed nothing else for a long stretch.
+
+So the row that describes the actual system is the last one, and it is the strongest result here:
+
+```
+pg19         1.6773 -> 1.3649   -0.3124   (read)
+reasoning    0.7076 -> 0.6846   -0.0230   (read)
+code         0.6552 -> 0.6404   -0.0148   (read)
+chat         0.7402 -> 0.7289   -0.0113   (read)
+stories      0.5599 -> 0.5537   -0.0063   (read)
+wikipedia    1.2549 -> 1.2493   -0.0056   (read)
+arithmetic   0.6419 -> 0.6433   +0.0014   (read)
+chess        0.4955 -> 0.4989   +0.0035   (read)
+chat_hermes  1.1043 -> 1.1085   +0.0042   (withheld)
+```
+
+![PG19 read as one of eight interleaved subjects](assets/probe_interleaved.png)
+
+**Add a new domain as a ninth lane and six of the nine improve.** PG19 falls by 0.31 nats and the eight the model already knew improve by 0.0065 on average - nothing moves more than +0.004 in the wrong direction, and the subject it was best at is untouched. Adding a domain to this model costs nothing: 100.13% retained is the eight coming out very slightly ahead of where they started. In the figure the eight are the flat band at zero and PG19 is the line leaving it - the same read that costs 0.13 nats when it is massed costs nothing when it is interleaved.
+
+Two readings matter here:
+
+- **The expert pool is not what prevents forgetting.** Freezing the working set - removing the one property that makes the pool a pool - changes forgetting by 0.0035 nats, which is nothing, and it *learns the new domain slowest of all three*. In that arm 137 of 174 experts received no gradient at all and the model still collapsed. Preserving most of the weights is not sufficient; the trunk is where the damage happens.
+- **The cost of learning is real, and it is small.** On genuinely new material the massed arm pays **0.13 nats across eight domains to gain 0.42 on a ninth** - a real exchange rate, and a favourable one. Interleaved, the exchange disappears.
 
 ![Every subject during a massed read, and how much of the pool was touched](assets/probe_massed.png)
 
-**What that same read looks like from the inside.** This is the working configuration - trunk at 0.1x - during the identical 524,000-character chess probe. On the left, every subject plotted against where it started. Chess, the subject actually being read, improves by 0.013 nats. The shaded band is the range across the seven subjects that are *not* being read, and it stays within ±0.02 nats for the whole probe: **learning one thing did not cost anything measurable anywhere else**. That is the claim in the first paragraph of this README, drawn rather than asserted.
+**What that same read looks like from the inside.** This is the working configuration - trunk at 0.1x - during the 1,048,576-character PG19 read. On the left, every subject against where it started. PG19 drops away from the pack; the eight withheld subjects drift up together, and the ones that drift most are **chat, stories and reasoning** - the prose-like lanes, nearest to Victorian novels. Chess and arithmetic barely move, at +0.009 and +0.043. The damage lands where the representations overlap, which is what the routing story predicts.
 
-The right panel is why that is possible at all. Over the whole probe only **54 of 136 experts received any gradient** - 60% of the model was structurally untouched, because routing never selected it. This is the pool doing exactly what a pool is for: confining an update to the part of the model that the text actually addressed.
+The right panel is why the damage is bounded at all. Over the whole read only **44 of 174 experts received any gradient** - 75% of the model was structurally untouched, because routing never selected it. This is the pool doing exactly what a pool is for: confining an update to the part of the model that the text actually addressed.
 
 **The learning rate is not scheduled.** A cosine schedule asserts that the run ends, which for a model that reads continually is false. Instead a controller watches held-out loss and moves the rate in both directions: clear improvement buys a little more, no evidence eases it down, and a confirmed jump in held-out steps it back up. 
+
+<details>
+<summary><b>Replicate this measurement yourself</b> - the probe, the results, and the weights it was measured on</summary>
+
+The claim above is a measurement, and a measurement you cannot repeat is an assertion. The probe, all four arms and the figures ship in [`replication/`](replication/).
+
+**Weights for the checkpoint every number above was measured on:**
+
+| data read | held-out | experts | download |
+|---|---|---|---|
+| 428.2M characters | 0.7702 nats / 1.1112 bits/byte | 174 | [Volotat/mini-AGI-cl-replication-weights](https://huggingface.co/Volotat/mini-AGI-cl-replication-weights/tree/main/weights) |
+
+Download the `weights/` folder into the repository root. Held-out there is the probe's own baseline - the eight training domains under `data/val`, 16 chunks each - which is what every figure above is measured against, and is evaluated on fewer chunks than the training run's own log.
+
+**To run it:**
+
+```bash
+python3 -m corpora all                             # data/train and data/val
+python3 -m corpora pg19 --split validation \
+        --out data/cl/pg19                         # the new domain, 50 books
+
+cp -a weights /tmp/w                               # a COPY - paging marks experts dirty
+python3 replication/forgetting_probe.py --weights /tmp/w \
+    --domain pg19 --read-root data/cl --steps 512 \
+    --at 0,64,128,256,384,512 --eval-chunks 16 --chunk 2048 \
+    --lr 2.08e-4 --held-out data/cl_val \
+    --trunk-lr-mult 0.1 --out replication/results/mine.json
+
+python3 replication/cl_summary.py                  # the table, control verdict first
+python3 replication/plot_figures.py                # redraws the figures above
+```
+
+`--read-root` keeps the new domain outside `data/train` on purpose: put PG19 in the corpus and the training run would start reading it too. `data/cl_val` holds the eight existing held-out sets plus PG19 books that are never read, so "PG19 improved" cannot be memorisation. The PG19 **validation** split is used rather than the test split, so the 2.4496 BPB benchmark further down this page stays untouched.
+
+Set `--trunk-lr-mult 1.0` for the unmitigated arm, add `--no-swap` to freeze the working set, and pass `--rotate pg19,chess,code,stories,arithmetic,wikipedia,chat,reasoning` for the interleaved control.
+
+**Read the control first.** `cl_summary.py` prints a verdict on it before anything else: every lane is read there, so forgetting is impossible by construction and any degradation is the instrument rather than the model. 
+
+</details>
+
 
 ## Reading your own files
 
@@ -162,48 +364,50 @@ The numbers below are for tracking purposes and move as the run continues. Held-
 
 There is a second variance underneath these figures. The same configuration run twice lands about 0.014 apart, because the expert dispatch is not deterministic on CUDA. **Treat about 0.03 as the threshold for a real difference**, not the error bar printed beside one score.
 
-**Where the model is** (318.1M characters read, 169 experts):
+<!-- auto:benchmarks -->
+**Where the model is** (456.2M characters read, 174 experts):
 
 | | nats/char | bits/byte |
 |---|---|---|
-| **held-out, all eight subjects** | **0.8336** ± 0.0331 | **1.2026** |
-| train | 0.6809 | 0.9823 |
+| **held-out, all 8 subjects** | **0.7751** ± 0.0338 | **1.1182** |
+| train | 0.6422 | 0.9265 |
 
 **Held-out loss per subject:**
 
 | Subject | nats/char | bits/byte |
 |---|---|---|
-| `chess` | 0.552 | 0.796 |
-| `stories` | 0.637 | 0.919 |
-| `arithmetic` | 0.657 | 0.948 |
-| `code` | 0.739 | 1.066 |
-| `reasoning` | 0.794 | 1.145 |
-| `chat` | 0.831 | 1.199 |
-| `chat_hermes` | 1.178 | 1.699 |
-| `wikipedia` | 1.280 | 1.847 |
+| `chess` | 0.501 | 0.723 |
+| `stories` | 0.561 | 0.809 |
+| `arithmetic` | 0.635 | 0.916 |
+| `code` | 0.656 | 0.946 |
+| `reasoning` | 0.717 | 1.034 |
+| `chat` | 0.753 | 1.086 |
+| `chat_hermes` | 1.133 | 1.635 |
+| `wikipedia` | 1.245 | 1.796 |
+<!-- /auto:benchmarks -->
 
 ### Data Scaling
 
-![Data scaling against published byte-level and subword models](assets/scaling.png)
+<!-- auto:scaling -->
+![Data scaling on PG19](assets/scaling.png)
 
-Every point on this chart is a model with a **published bits-per-byte** - the only loss unit that survives a change of tokenizer, which is why a byte-level model can be put beside GPT-3 at all. 
+Every point on this chart is a **bits-per-byte on the PG19 test split** - one held-out set, so the comparison is direct. This model scores **2.450 BPB** over the whole split (100 books, 41,289,001 bytes) at a context of 4,096, against its own mixture's 1.16. PG19 is out of distribution for it: it was trained on a corpus assembled for this project and has read no Victorian novels, so much of that gap is subject matter rather than capability.
 
-Three held-out sets are involved - PG19, Pile-CC and this project's own mixture - so the vertical positions are not strictly comparable across colours. MambaByte-353M is the closest like-for-like, same parameter class and essentially the same FLOPs per byte, and it read **94x more data than this model has**. Transformer-320M read 251x more. 
+**The results so far are promising.** The red line is the fitted power law on this model's own held-out, `L ∝ D^-0.243` with R² 0.97 over every point past the warmup - between Kaplan's 0.095 and Chinchilla's 0.28, and it has held for more than a decade of data. How steep it looks depends on where the fit starts, and the band on the chart spans that range rather than pretending to one number.
 
-**The results so far are promising.** The red line is the fitted power law, `L ∝ D^-0.239` with R² 0.96 over every point past the warmup - a clean, healthy exponent, between Kaplan's 0.095 and Chinchilla's 0.28, and it has held for more than a decade of data. How steep it looks depends on where the fit starts: windows from 40M to 150M give 0.21 to 0.32, and the band on the chart spans that range rather than pretending to one number.
+Read straight off that trend, on this model's own mixture:
 
-Read straight off that trend, and remembering that the target is this model's own mixture rather than PG19:
-
-| held-out | bytes needed | days at ~778 char/s |
+| held-out | bytes needed | days at ~700 char/s |
 |---|---|---|
-| 1.10 BPB | 0.51B | ~3 |
-| 1.00 BPB | 0.75B | ~6 |
-| 0.93 BPB | 1.02B | ~10 |
-| 0.80 BPB | 1.92B | ~24 |
+| 1.10 BPB | 0.49B | ~1 |
+| 1.00 BPB | 0.72B | ~4 |
+| 0.93 BPB | 0.97B | ~9 |
+| 0.80 BPB | 1.81B | ~22 |
 
-Those are days to weeks of reading on one laptop GPU, not years, and all of them sit inside a single pass of the 7.87B-character corpus.
+Those are days to weeks of reading on one laptop GPU, not years, and all of them sit inside a single pass of the 7.88B-character corpus.
 
-The right panel shows which subjects are still moving. Code, chat, stories and reasoning are the steep ones; wikipedia and chat_hermes carry the most loss and have the shallowest slopes, which is the honest counterweight - the expensive domains are not the fastest ones.
+The right panel shows which subjects are still moving. code, reasoning, chat, stories are the steep ones; arithmetic and wikipedia have the shallowest slopes, which is the honest counterweight - the expensive domains are not the fastest ones.
+<!-- /auto:scaling -->
 
 ## Running it
 
