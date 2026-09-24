@@ -83,7 +83,7 @@ def pick_next(logits, prev_ids, temperature=0.0, top_k=0, top_p=1.0,
         w = (adapt_decay ** torch.arange(n - 1, -1, -1, device=logits.device,
                                          dtype=logits.dtype))
         trace = torch.zeros_like(logits)
-        trace.scatter_add_(1, tail, w.expand(B, n))
+        trace = trace.scatter_add(1, tail, w.expand(B, n))
         logits = logits - adapt_strength * trace
     if rep_penalty and rep_penalty != 1.0 and prev_ids is not None:
         for b in range(B):
