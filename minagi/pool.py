@@ -418,7 +418,7 @@ class PooledMLP(nn.Module):
                             w.detach().float().cpu()))
 
         with torch.no_grad():
-            hit = F.one_hot(idx.reshape(-1), n).float().sum(0)
+            hit = torch.bincount(idx.reshape(-1), minlength=n).float()
             if hasattr(p, "note_use"):
                 p.note_use(hit)          # slots map back to experts
             else:
