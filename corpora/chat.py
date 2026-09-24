@@ -90,7 +90,7 @@ def _self_facts():
     f.setdefault("vocab", 265)
     f.setdefault("n_experts", 74)
     f.setdefault("top_k", 16)
-    f.setdefault("max_steps", 6)
+    f.setdefault("euler_steps", 6)
     f.setdefault("pool_max", 512)
     f.setdefault("block_applications", 26)
     # the vocabulary is the 256 byte values plus the structural markers
@@ -148,11 +148,11 @@ def _self_facts():
     f["n_prelude"] = cfg.get("n_prelude") or _g(c, "model.n_prelude", 2)
     f["n_recur"] = cfg.get("n_recur") or _g(c, "model.n_recur", 3)
     f["n_coda"] = cfg.get("n_coda") or _g(c, "model.n_coda", 1)
-    f["max_steps"] = cfg.get("max_steps") or _g(c, "model.max_steps",
-                                                f["max_steps"])
+    f["euler_steps"] = cfg.get("euler_steps") or _g(c, "model.euler_steps",
+                                                f["euler_steps"])
     # only the recurrent blocks and the coda route through the pool; the
     # prelude blocks keep a dense feed-forward of their own
-    f["pooled_depths"] = f["max_steps"] * (f["n_recur"] + f["n_coda"])
+    f["pooled_depths"] = f["euler_steps"] * (f["n_recur"] + f["n_coda"])
     f["block_applications"] = f["n_prelude"] + f["pooled_depths"]
     f["context"] = man.get("context_now") or _g(c, "model.context_start",
                                                 f["block"])
@@ -249,7 +249,7 @@ SELF_FROM_CODE = [
     (["how do you think", "do you think before answering",
       "what happens before you answer"],
      "Two things. I can run the same blocks over my own hidden state up to "
-     "{max_steps} times before committing to a character, which is thinking "
+     "{euler_steps} times before committing to a character, which is thinking "
      "that never becomes text. I can also write working out between think "
      "tags and read it back, which is thinking you can inspect."),
 
@@ -287,7 +287,7 @@ SELF_FROM_CODE = [
     (["how deep are you", "how many layers do you have",
       "how much computation do you do"],
      "It depends on the character. I decide per character how many passes to "
-     "take, up to {max_steps}, and stop when another pass would not change the "
+     "take, up to {euler_steps}, and stop when another pass would not change the "
      "answer. At full depth that is {block_applications} block applications "
      "from {unique_blocks} distinct blocks."),
 

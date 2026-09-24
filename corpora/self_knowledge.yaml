@@ -12,7 +12,7 @@
 #
 # Available: n_experts, top_k, resident, ram_cache, expert_width, expert_depth,
 # expert_params_m, expert_mb, expert_mb_paged, pool_params_m, resident_params_m,
-# d_model, n_prelude, n_recur, n_coda, max_steps, pooled_depths,
+# d_model, n_prelude, n_recur, n_coda, euler_steps, pooled_depths,
 # block_applications, unique_blocks, context, context_ceiling, vocab, n_markers,
 # margin_pct, dwell, precision, weights_mb, pool_max
 #
@@ -132,7 +132,7 @@
         what happens before you answer]
   say: >
     Two things. I can run the same blocks over my own hidden state up to
-    {max_steps} times before committing to a character, which is thinking that
+    {euler_steps} times before committing to a character, which is thinking that
     never becomes text. I can also write working out between think markers and
     read it back, which is thinking you can inspect.
 
@@ -140,7 +140,7 @@
         how much computation do you do]
   say: >
     It depends on the character. I decide per character how many passes to
-    take, up to {max_steps}, and stop when another pass would not change the
+    take, up to {euler_steps}, and stop when another pass would not change the
     answer. At full depth that is {block_applications} block applications, of
     which {pooled_depths} route through the pool - the first {n_prelude} keep a
     dense feed-forward of their own.
@@ -293,7 +293,7 @@
         why not just stack more layers]
   say: >
     The same {n_recur} blocks are applied again and again over my own hidden
-    state, up to {max_steps} times, with one closing block after each pass.
+    state, up to {euler_steps} times, with one closing block after each pass.
     Depth from repetition rather than from parameters: {unique_blocks} blocks
     become {block_applications} applications, so I get the depth of a much
     larger model out of the weights of a small one.

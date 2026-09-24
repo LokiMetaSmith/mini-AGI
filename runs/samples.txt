@@ -32961,7 +32961,7 @@ math.is_column()
    def __init_(self, *args):
     """The maximum nodes that work.
    """
-  if not max_steps:
+  if not euler_steps:
     model.args.append()
    if m
 
@@ -38366,7 +38366,7 @@ prompt: 'def merge_sorted(a, b):\n    '
 [raw]  repeated 8-grams 30%
 max_set_steps = any(a, b, c)
     max_seconds = a[a, b, c]
-    max_steps = a[a]
+    euler_steps = a[a]
     format_substrings = a[a]
     format_substrings = a[a]
    

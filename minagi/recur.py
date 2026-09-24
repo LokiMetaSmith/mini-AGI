@@ -6,7 +6,7 @@ applications. Each character decides for itself how many passes it needs
 (PonderNet-style halting) and stops when another pass would not change the
 answer.
 
-    n_prelude + max_steps * (n_recur + n_coda)   block applications
+    n_prelude + euler_steps * (n_recur + n_coda)   block applications
     n_prelude + n_recur + n_coda                 distinct blocks
 
 `RecurConfig.n_layer_effective` is the authority on that arithmetic; anything
@@ -162,7 +162,7 @@ class RecurCoder(nn.Module):
 
     def n_slots(self):
         c = self.cfg
-        return c.n_prelude + c.max_steps * (c.n_recur + c.n_coda)
+        return c.n_prelude + c.euler_steps * (c.n_recur + c.n_coda)
 
     def want_experts(self, idx):
         """
