@@ -390,7 +390,7 @@ class PooledMLP(nn.Module):
             with torch.no_grad():
                 sl = torch.zeros(x.shape[0] * x.shape[1], n,
                                  device=w.device, dtype=torch.float32)
-                sl.scatter_(1, idx, w.float())
+                sl = sl.scatter(1, idx, w.float())
                 self.last_weight = sl.mean(0)
                 # the LAST position on its own as well: the mean is a union
                 # over the chunk, so it cannot answer what one character chose

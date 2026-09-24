@@ -19,3 +19,5 @@ runs/corpus_index.json
 # secrets
 .env
 .env.*
+venv
+venv2
