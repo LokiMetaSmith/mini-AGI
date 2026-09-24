@@ -65,13 +65,17 @@ def compute_dtype():
     return _COMPUTE["dtype"]
 
 
+import contextlib
+
+
 def amp(device=None):
     """The autocast region every forward runs inside."""
     dt = _COMPUTE["dtype"]
     dev = "cuda" if device is None else (
         device.type if hasattr(device, "type") else str(device).split(":")[0])
-    return torch.autocast(dev, dtype=dt,
-                          enabled=(dt is not torch.float32 and dev == "cuda"))
+    if dev != "cuda" or dt is torch.float32:
+        return contextlib.nullcontext()
+    return torch.autocast(dev, dtype=dt, enabled=True)
 
 
 # -- storing moments in half the space ------------------------------------

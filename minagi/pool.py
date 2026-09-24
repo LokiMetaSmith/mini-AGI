@@ -418,7 +418,7 @@ class PooledMLP(nn.Module):
                             w.detach().float().cpu()))
 
         with torch.no_grad():
-            hit = F.one_hot(idx.reshape(-1), n).float().sum(0)
+            hit = torch.bincount(idx.reshape(-1), minlength=n)[:n].float()
             if hasattr(p, "note_use"):
                 p.note_use(hit)          # slots map back to experts
             else:
@@ -431,7 +431,7 @@ class PooledMLP(nn.Module):
             # pressure, and it is visible without waiting for a plateau.
             p.pressure = 0.9 * float(p.pressure) + 0.1 * (1.0 - kept)
             p.want_k = 0.9 * float(p.want_k) + 0.1 * float(want)
-        frac = F.one_hot(idx[:, 0], n).float().mean(0)
+        frac = torch.bincount(idx[:, 0], minlength=n)[:n].float() / max(1, idx.shape[0])
         self.aux = ((frac * probs.mean(0)).sum() * n
                     + self.z_weight * torch.logsumexp(logits, -1).pow(2).mean())
 
