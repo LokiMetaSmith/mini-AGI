@@ -25,7 +25,7 @@ def create(out, seed=0, verbose=True, force=False, **over):
     Build `out` from config.yaml, returning the config that was written.
 
     Keyword overrides take the same names the settings do - experts,
-    resident, d_ff, depth, d_model, trunk_d_ff, n_head, block, max_steps,
+    resident, d_ff, depth, d_model, trunk_d_ff, n_head, block, euler_steps,
     top_k - and a None is ignored, so a caller can forward unset CLI
     arguments without special-casing each one.
     """

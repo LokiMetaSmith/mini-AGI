@@ -1494,7 +1494,7 @@ def sample_now(model, tok, device, n_new=140, variants=None):
             got = []
             # NO GRAPH. model.eval() only changes dropout; without this every
             # generated character is retained in an autograd graph, chained to
-            # the last through `cur`, across all max_steps rows of expert
+            # the last through `cur`, across all euler_steps rows of expert
             # dispatch. Nothing here is ever backpropagated, and at 24 rows
             # and two readings per prompt it is what put sampling out of
             # memory while training itself sat at 3.8 GB.
