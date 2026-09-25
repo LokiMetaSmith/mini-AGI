@@ -30,6 +30,7 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 from .precision import compute_dtype
+from .dml import index_read
 
 class Expert(nn.Module):
     """
@@ -511,7 +512,7 @@ class PooledMLP(nn.Module):
                 dt = src.dtype
             buf = torch.zeros(n * cap, D, device=src.device, dtype=dt)
             flat_idx = e_sorted * cap + slot
-            buf = buf.index_add(0, flat_idx, src[t_sorted].to(dt)).view(n, cap, D)
+            buf = buf.index_add(0, flat_idx, index_read(src, t_sorted).to(dt)).view(n, cap, D)
             if len(lv) == 1:
                 W1, W3, W2 = lv[0]
                 h = F.silu(torch.bmm(buf, W1.transpose(1, 2).to(buf.dtype))) * \
