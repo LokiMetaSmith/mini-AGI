@@ -383,7 +383,7 @@ class PagedPool(nn.Module):
         """Routing counts arrive per SLOT; usage is kept per EXPERT."""
         idx = torch.tensor([max(s, 0) for s in self.slots],
                            device=self.use.device)
-        self.use.index_add_(0, idx, hit.to(self.use.dtype))
+        self.use.copy_(self.use.index_add(0, idx, hit.to(self.use.dtype)))
         self.age += 1
 
     def n_params(self):
@@ -511,8 +511,8 @@ class PagedPool(nn.Module):
             w = s.router.weight[:self._n]
             lg = F.linear(h.to(w.dtype) + s.depth_emb.to(w.dtype), w).float()
             top = torch.topk(torch.softmax(lg, -1), k, dim=-1)
-            want.index_add_(0, top.indices.reshape(-1),
-                            top.values.reshape(-1).to(want.dtype))
+            want.copy_(want.index_add(0, top.indices.reshape(-1),
+                            top.values.reshape(-1).to(want.dtype)))
         self._h_keep = []                       # consumed
 
         # The router can only speak for the experts it has been trained on,
@@ -544,8 +544,8 @@ class PagedPool(nn.Module):
                 sim = sim * earned
                 top = torch.topk(sim, k, dim=-1)
                 fit = torch.zeros_like(want)
-                fit.index_add_(0, top.indices.reshape(-1),
-                               top.values.reshape(-1).to(fit.dtype))
+                fit.copy_(fit.index_add(0, top.indices.reshape(-1),
+                               top.values.reshape(-1).to(fit.dtype)))
                 # Fit is not enough on its own. A brand new expert's key comes
                 # from its random w1, which matches text about as well as
                 # anything does, so fit alone elects the untrained - and an
