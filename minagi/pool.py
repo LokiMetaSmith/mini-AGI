@@ -533,7 +533,7 @@ class PooledMLP(nn.Module):
             gathered = run(flat, *flat_w)
 
         out = torch.zeros_like(flat)
-        out.index_add_(0, t_sorted, gathered * w_sorted.unsqueeze(-1))
+        out = out.index_add(0, t_sorted, gathered * w_sorted.unsqueeze(-1))
         return out.view(B, T, D)
 
 
